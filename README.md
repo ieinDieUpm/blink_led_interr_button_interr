@@ -1,124 +1,107 @@
-# Blink LED
+# Blink LED con interrupción de botón e interrupción de temporizador
 
-This project bases on the [MatrixMCU toolkit](https://github.com/sdg2DieUpm/MatrixMCU).
+Este proyecto hace parpadear el LED LD2 de la Nucleo-STM32F446RE a una frecuencia de `c` Hz. La frecuencia es controlada por el pulsado del botón de usuario B1. Cada vez que se pulsa el botón, la frecuencia (`c`) aumenta en 1. El LED está apagado cuando `c` es igual a 0. El botón es gestionado por una rutina de servicio de interrupción (ISR). El tiempo de parpadeo es gestionado por interrupción de temporizador.
 
-This README serves as a template for the documentation of your project. You can use it as a guide to write your own documentation. At the end of the document you will find some information on the `project_template` repository.
+El sistema usa la interrupción del temporizador 2 (TIM2) para detectar el final del tiempo de encendido o apagado del LED. La interrupción se configura con los siguientes ajustes:
 
-Watch this video to better understand how to document your code with **Doxygen**:
+| Parámetro   | Valor           |
+| ----------- | --------------- |
+| Interrupción| TIM2_IRQHandler |
+| Prioridad   | 2               |
+| Subprioridad| 0               |
 
-[![Link to Doxygen tutorial](docs/assets/imgs/doxygen_thumb.png)](https://youtu.be/VC7fExJJQSY?si=oIAZU_b2sRWhu3de "[MatrixMCU]. Documentación de código con Doxygen.")
+## Ejercicio: parpadeo con interrupción del TIM2
 
-## Authors
+**Cree el proyecto** `blink_led_interr_button_interr`. **Se trata de una modificación del programa** `blink_led_button_interr` **donde la acción de esperar no se toma al leer mediante *polling* el valor del** `SysTick` **para medir el tiempo pasado, sino mediante una interrupción del *timer* 2** (`TIM2`).
 
-* **Author 1** - email: [author@author.es](mailto:author@author.es)
-* **Author 2** - email: [author@author.es](mailto:author@author.es)
+**En todo momento usaremos la HAL de ST.**
 
-Write a brief descrition of your project **here**.
+1 . En el fichero `stm32f4_led.h` completar los `#define` que faltan:
 
-You can add a frontpage image **(ensure you are the owner)** here. e.g.: a picture of the HW setup, an oscilloscope capture, etc.
-
-**Images must be located in folder `docs/assets/imgs/` and can be included in the document awith the following Markdown format:**
-
-```markdown
-![Alternative text](docs/assets/imgs/image.png)
+```c
+#define STM32F4_LED_TIMER TIM2
+#define STM32F4_LED_TIMER_IRQn TIM2_IRQHandler
+#define STM32F4_LED_TIMER_IRQ_PRIO
+#define STM32F4_LED_TIMER_IRQ_SUBPRIO
 ```
 
-It looks like this:
-![Alternative text](docs/assets/imgs/image.png)
+2 . En el fichero `stm32f4_led.c` hay que crear la variable global que define la estructura de tipo `TIM_HandleTypeDef` del *timer*. Use un nombre representativo, por ejemplo `handler_timer_led`:
 
-**Add a public link to video of your property with a demo and explanation of your project.**
+  ```c
+  TIM_HandleTypeDef handler_timer_led;
+  ```
 
-To add a link to a Youtube video you can use the following Markdown format:
+3 . **En el mismo fichero, crear la función** `port_led_timer_setup()` **que inicializa la estructura *timer* **y hacerla pública en el `.h`.**
 
-```markdown
-[![Alternative text](docs/assets/imgs/image2.png)](https://youtu.be/VEDEO_ID "Hover text.")
+   - Lo primero siempre es habilitar la **fuente de reloj** del *timer* 2: `__HAL_RCC_TIM2_CLK_ENABLE();`; de otro modo no podrá tocar los registros del *timer*.
+   - En la estructura `handler_timer_led` **inicie los campos**:
+     - `handler_timer_led.Instance` con el *timer* del LED que se ha definido en `STM32F4_LED_TIMER`. 
+     - `handler_timer_led.Init.Prescaler` con el valor del *prescaler* a 0 (no se sabe todavía).
+     - `handler_timer_led.Init.Period` con el valor del periodo a 0 (no se sabe todavía).
+     - `handler_timer_led.Init.AutoReloadPreload` con el valor a `TIM_AUTORELOAD_PRELOAD_ENABLE` (para que el contador se recargue automáticamente; si no se hace, solo se contará una vez).
+   - **Inicializar el** *timer* con la función `HAL_TIM_Base_Init()` pasando la dirección de la estructura `handler_timer_led`.
+   - **Activa el temporizador en modo interrupción** del *timer*: `HAL_TIM_Base_Start_IT();` pasando la dirección de la estructura `handler_timer_led`.
+   - **Configurar la prioridad** de la interrupción  con la función `HAL_NVIC_SetPriority()` pasando el nombre de la IRQ del *timer*, la prioridad y la subprioridad definidas en el `.h`.
+   - **Habilitar la interrupción** del *timer* en el *NVIC*: `HAL_NVIC_EnableIRQ()` pasando el nombre de la IRQ del *timer* definida en `STM32F4_LED_TIMER_IRQn`.
+
+4 . **Crear la función** `port_led_timer_delay_ms(uint32_t delay_ms)` **que configura el tiempo de interrupción periódica del *timer* al valor** `delay_ms`, **y hacerla pública en el `.h`.**
+
+  - **Deshabilitar** la cuenta del *timer* para que no interrumpa, para ello llamar a la función `HAL_TIM_Base_Stop_IT()` pasando la dirección de la estructura `handler_timer_led`.
+  - Poner el contador `CNT` a 0 con la función `__HAL_TIM_SET_COUNTER()` pasando la dirección de la estructura `handler_timer_led` y el valor 0.
+  - **Calcular el valor del periodo** (`ARR`) **en función del** *prescaler* (`PSC`).
+     
+    - La ecuación del periodo de interrupción del *timer* es `T_interr = f_clk / ((PSC + 1) * (ARR + 1))`.
+    - La frecuencia del reloj del sistema es 16 MHz y está definida en la variable `SystemCoreClock`.
+    - **Comprobar** que el valor del periodo `ARR` ni el *prescaler* `PSC` superan el valor máximo de 16 bits (65535). Puede hacerlo en un bucle `while()`.
+    - Tener en cuenta que el valor de interrupción recibido es en milisegundos y hay que **convertirlo a segundos**.
+    - **Trabajar con precisión `double` en todas las variables y constantes.** *castear* los valores de la frecuencia del reloj del sistema y del periodo de interrupción a `double`. *e.g.*:
+      - `double f_clk = (double)SystemCoreClock`
+      - `double T_interr = (double)delay_ms / 1000.0`
+      - `1.0` en lugar de `1` para que el resultado sea `double`.
+      - Cuando tenga los valores de `PSC` y `ARR`, los cargamos en los campos correspondientes de la estructura `handler_timer_led.Init`:
+        - `handler_timer_led.Init.Prescaler` con el valor de `PSC`.
+        - `handler_timer_led.Init.Period` con el valor de `ARR`.
+    - **Actualizar la configuración del *timer*** con la función `HAL_TIM_Base_Init()` pasando la dirección de la estructura `handler_timer_led`.
+    - **Forzar la actualización de registros** activando el bit `UG`, para ello llamar a la función `HAL_TIM_GenerateEvent()` pasando la dirección de la estructura `handler_timer_led` y el tipo de evento `TIM_EVENTSOURCE_UPDATE` (actualización). Esto hará que el *timer* recargue el valor del contador `CNT` a 0 y el valor del periodo `ARR` al nuevo valor.
+    - Por último, **habilitar de nuevo la cuenta del *timer*** activando el bit `CEN` mediante la función `HAL_TIM_Base_Start_IT()` pasando la dirección de la estructura `handler_timer_led`.
+  
+5 . **En el fichero** `interr.c`, donde están las variables globales, **declarar la variable** `handler_timer_led` **como** `extern`. Esto le dice al compilador que la variable está definida en otro fichero y que no la defina de nuevo. La declaración debe ser:
+
+```c
+extern TIM_HandleTypeDef handler_timer_led;
 ```
 
-It looks like this:
+6 . **Implementar la función** `TIM2_IRQHandler()` **que se ejecuta cuando se produce la interrupción del *timer* 2.**
 
-[![Link to Blink tutorial](docs/assets/imgs/image2.png)](https://www.youtube.com/watch?v=CcbgLVfCXrw& "Youtube video.")
+  - Llamar a la función `HAL_TIM_IRQHandler()` pasando la dirección de la estructura `handler_timer_led`. Esto limpiará el bit `UIF` del registro `SR` y llamará automáticamente a la función de *Callback* `HAL_TIM_PeriodElapsedCallback()` que es la que está relacionada con la interrupción que haya sucedido; en nuestro caso, llamará a la de fin de periodo de interrupción.
 
-## Version 1
+7 . **Implementar la función** `HAL_TIM_PeriodElapsedCallback()` **en el mismo fichero.**
+  - Lo primero es **comprobar** que la interrupción que ha sucedido es la de fin de periodo del *timer* del LED, *i.e.*:
 
-Brief description of version 1.
-
-* To make a text bold, use the `**` symbol consecutively. For example: **Bold text**
-* To make a text italic, use the `*` symbol consecutively. For example: *Italic text*
-* To make a text both italic and bold, use the `***` symbol consecutively. For example: ***Italic and bold text***
-
-To add subsections, use the `#` symbol consecutively. For example:
-
-### Subsection 1
-
-Brief description of subsection 1.
-
-To add a list of items, use the `*` symbol consecutively. For example:
-
-* Item 1
-* Item 2
-* Item 3
-
-To add a list of numbered items, use the `1.` symbol consecutively. For example:
-
-1. Item 1
-2. Item 2
-3. Item 3
-
-To add a link to a webpage, use the following code:
-
-```markdown
-Link to [Google](https://www.google.com).
+```c
+    if (handler_tim->Instance == STM32F4_LED_TIMER)
+    {
+      // Código de la interrupción del timer del LED
+    }
 ```
 
-It looks like this: Link to [Google](https://www.google.com).
+  - Si es nuestro *timer* el que ha interrumpido, llamar a la función `port_led_toggle()` para cambiar el estado del LED **solo si el contador de pulsaciones `c` es mayor que 0.**
+  - Gestionar el indicador de botón pulsado `button_pressed` adecuadamente.
+  
+8 . **En la `HAL_GPIO_EXTI_Callback` del botón, llamar a la función** `port_led_timer_delay_ms()` con el valor adecuado para el parpadeo del LED. 
 
-You can add tables in the following way:
+  Como puede ver, como ya no hay que hacer espera activa, ya no hay que llamar a `port_system_delay_ms()` en la función `main()`. En su lugar, se llama a `port_led_timer_delay_ms()`, que es la que configura el *timer* para que interrumpa cada `delay_ms` milisegundos.
 
-| Column 1 | Column 2 | Column 3 |
-| -------- | -------- | -------- |
-| Value 1  | Value 2  | Value 3  |
-| Value 4  | Value 5  | Value 6  |
+9 . **Por último, en** `main.c`:
 
-To add a link to a `.c` or `.h` file, you can use the following code. You can add links to codes like this, with the simple use of the backtick symbol `:
+  - **Quitar** del `main()` la gestión del parpadeo del LED.
+  - Como las variables `c` y `button_pressed` se gestionan en las ISRs, **quitamos su declaración y en** `interr.c` **ya no hace falta declararlas como** `extern`; **quítelo**.
+  - **Llamar a la función** `port_led_timer_setup()` en el `main()` para inicializar el *timer* que controla el parpadeo del LED. El bucle `while(1)` **ya no tiene que hacer nada**. El parpadeo del LED se hace en la ISR del *timer*.
 
-```markdown
-Link to the `interr.c`.
-```
+## References
 
-It looks like this: Link to the `interr.c`.
-
-You can also change the name of the link, or point to another `.html` file. These are links to `.html` files that are automatically generated with the code documentation when running Doxygen and are located in the `docs/html/` folder.
-
-```markdown
-Link to the [FSM of Version 1](fsm__button_8c.html).
-```
-
-It looks like this: Link to the [File with ISRs](interr_8c.html).
-
-## Version 2
-
-Brief description of version 2.
-
-## Version N
-
-Brief description of version N.
-
-## Information on project_template
-
-Template repository for C projects
-
-## File Organization
-
-The application file organization is as follows:
-
-| Main Folder Structure | Description                                                                                                   |
-| --------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `.github/`            | Configuration files for GitHub actions on `devel` and `main` branches (to do).                                |
-| `.vscode/`            | Configuration files for the Visual Studio Code IDE.                                                           |
-| `bin/`                | Executables for the application and the tests.                                                                |
-| `build/`              | CMake and make build files.                                                                                   |
-| `common/`             | C source and header files of your project. These files must be platform-agnostic.                             |
-| `port/`               | C source and header files of your project. These files are platform-specific.                                 |
-| `main.c`              | The main routine of your project. It must contain a C `main` function from which your program starts running. |
-| `test/`               | Test sources and required data for testing.                                                                   |
-| `CMakeLists.txt`      | CMake lists file. It specifies how to create the `Makefile` of the application using the `cmake` tool.        |
+- **[1]**: [Fundamentos teóricos de sistemas basados en microcontrolador STM32. Sistemas Digitales II, Sistemas Electrónicos](https://oa.upm.es/88460)
+- **[2]**: [Embedded Systems with ARM Cortex-M Microcontrollers in Assembly Language and C (Fourth Edition)](https://web.eece.maine.edu/~zhu/book/index.php) for explanations and examples of use of the ARM Cortex-M microcontrollers in C with CMSIS.
+- **[3]**: [Programming with STM32: Getting Started with the Nucleo Board and C/C++](https://ingenio.upm.es/primo-explore/fulldisplay?docid=34UPM_ALMA51126621660004212&context=L&vid=34UPM_VU1&lang=es_ES&search_scope=TAB1_SCOPE1&adaptor=Local%20Search%20Engine&tab=tab1&query=any,contains,Programming%20with%20STM32:%20Getting%20Started%20with%20the%20Nucleo%20Board%20and%20C%2FC%2B%2B&offset=0) for examples of use of the STM32 microcontrollers with the HAL of ST.
+- **[4]**: [The C Programming Language](https://ingenio.upm.es/primo-explore/fulldisplay?docid=34UPM_ALMA2151866130004212&context=L&vid=34UPM_VU1&lang=es_ES&search_scope=TAB1_SCOPE1&adaptor=Local%20Search%20Engine&isFrbr=true&tab=tab1&query=any,contains,C%20Programming%20Language)
+- **[5]**: [Nucleo Boards Programming with th STM32CubeIDE](https://www.elektor.com/products/nucleo-boards-programming-with-the-stm32cubeide) for examples of use of the STM32 microcontrollers with the STM32CubeIDE.
