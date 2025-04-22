@@ -103,8 +103,8 @@ Ejercicio: parpadeo con interrupción del TIM2</h1>
 <p><b>Cree el proyecto</b> <code>blink_led_interr_button_interr</code>. <b>Se trata de una modificación del programa</b> <code>blink_led_button_interr</code> <b>donde la acción de esperar no se toma al leer mediante <em>polling</em> el valor del</b> <code>SysTick</code> <b>para medir el tiempo pasado, sino mediante una interrupción del <em>timer</em> 2</b> (<code>TIM2</code>).</p>
 <p><b>En todo momento usaremos la HAL de ST.</b></p>
 <p>1 . En el fichero <code><a class="el" href="stm32f4__led_8h.html" title="Header file for the LED port layer of the STM32F4 Nucleo board.">stm32f4_led.h</a></code> completar los <code>#define</code> que faltan:</p>
-<div class="fragment"><div class="line"><span class="preprocessor">#define STM32F4_LED_TIMER TIM2</span></div>
-<div class="line"><span class="preprocessor">#define STM32F4_LED_TIMER_IRQn TIM2_IRQHandler</span></div>
+<div class="fragment"><div class="line"><span class="preprocessor">#define STM32F4_LED_TIMER </span></div>
+<div class="line"><span class="preprocessor">#define STM32F4_LED_TIMER_IRQn </span></div>
 <div class="line"><span class="preprocessor">#define STM32F4_LED_TIMER_IRQ_PRIO</span></div>
 <div class="line"><span class="preprocessor">#define STM32F4_LED_TIMER_IRQ_SUBPRIO</span></div>
 </div><!-- fragment --><p>2 . En el fichero <code>stm32f4_led.c</code> hay que crear la variable global que define la estructura de tipo <code>TIM_HandleTypeDef</code> del <em>timer</em>. Use un nombre representativo, por ejemplo <code>handler_timer_led</code>:</p>
@@ -149,7 +149,7 @@ Ejercicio: parpadeo con interrupción del TIM2</h1>
 </li>
 <li><b>Actualizar la configuración del</b> <em>timer</em> con la función <code>HAL_TIM_Base_Init()</code> pasando la dirección de la estructura <code>handler_timer_led</code>.</li>
 <li><b>Forzar la actualización de registros</b> activando el bit <code>UG</code>, para ello llamar a la función <code>HAL_TIM_GenerateEvent()</code> pasando la dirección de la estructura <code>handler_timer_led</code> y el tipo de evento <code>TIM_EVENTSOURCE_UPDATE</code> (actualización). Esto hará que el <em>timer</em> recargue el valor del contador <code>CNT</code> a 0 y el valor del periodo <code>ARR</code> al nuevo valor.</li>
-<li>Por último, **habilitar de nuevo la cuenta del *timer*** activando el bit <code>CEN</code> mediante la función <code>HAL_TIM_Base_Start_IT()</code> pasando la dirección de la estructura <code>handler_timer_led</code>.</li>
+<li>Por último, <b>habilitar de nuevo la cuenta del timer</b> activando el bit <code>CEN</code> mediante la función <code>HAL_TIM_Base_Start_IT()</code> pasando la dirección de la estructura <code>handler_timer_led</code>.</li>
 </ul>
 </li>
 </ul>
@@ -171,7 +171,7 @@ Ejercicio: parpadeo con interrupción del TIM2</h1>
 <li>Gestionar el indicador de botón pulsado <code>button_pressed</code> adecuadamente.</li>
 </ul>
 <p>8 . <b>En la <code>HAL_GPIO_EXTI_Callback</code> del botón, llamar a la función</b> <code><a class="el" href="port__led_8h.html#affcaa98bca3168685a89da9f8e7f717d" title="Delays the program for a given amount of milliseconds.">port_led_timer_delay_ms()</a></code> con el valor adecuado para el parpadeo del LED.</p>
-<p>Como puede ver, como ya no hay que hacer espera activa, ya no hay que llamar a <code><a class="el" href="port__system_8h.html#ae6ca17ba9c9d055d442cf1e4a73be046" title="Delays the program execution for the specified number of milliseconds.">port_system_delay_ms()</a></code> en la función <code><a class="el" href="main_8c.html#ae66f6b31b5ad750f1fe042a706a4e3d4" title="Main function.">main()</a></code>. En su lugar, se llama a <code><a class="el" href="port__led_8h.html#affcaa98bca3168685a89da9f8e7f717d" title="Delays the program for a given amount of milliseconds.">port_led_timer_delay_ms()</a></code>, que es la que configura el <em>timer</em> para que interrumpa cada <code>delay_ms</code> milisegundos.</p>
+<p>Como puede ver, como ya no hay que hacer espera activa, ya no hay que llamar a <code><a class="el" href="port__system_8h.html#ae6ca17ba9c9d055d442cf1e4a73be046" title="Delays the program execution for the specified number of milliseconds.">port_system_delay_ms()</a></code> en la función <code><a class="el" href="main_8c.html#ae66f6b31b5ad750f1fe042a706a4e3d4" title="Main function.">main()</a></code>. En su lugar, se llama a <code><a class="el" href="port__led_8h.html#affcaa98bca3168685a89da9f8e7f717d" title="Delays the program for a given amount of milliseconds.">port_led_timer_delay_ms()</a></code> en la ISR, que es la que configura el <em>timer</em> para que interrumpa cada <code>delay_ms</code> milisegundos.</p>
 <p>9 . <b>Por último, en</b> <code>main.c</code>:</p>
 <ul>
 <li><b>Quitar</b> del <code><a class="el" href="main_8c.html#ae66f6b31b5ad750f1fe042a706a4e3d4" title="Main function.">main()</a></code> la gestión del parpadeo del LED.</li>
