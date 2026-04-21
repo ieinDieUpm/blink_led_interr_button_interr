@@ -6,6 +6,6 @@ var interr_8c =
     [ "SysTick_Handler", "interr_8c.html#ab5e09814056d617c521549e542639b7e", null ],
     [ "TIM2_IRQHandler", "interr_8c.html#a38ad4725462bdc5e86c4ead4f04b9fc2", null ],
     [ "button_pressed", "interr_8c.html#aa41251119395c3dfe9475fe49c6c668e", null ],
-    [ "c", "interr_8c.html#abef96d989799a17bf7f236796bb23e2b", null ],
-    [ "handler_timer_led", "interr_8c.html#a36d40c0478d407554b7cbdc001da6de2", null ]
+    [ "handler_timer_led", "interr_8c.html#a36d40c0478d407554b7cbdc001da6de2", null ],
+    [ "timeout_elapsed", "interr_8c.html#a702f336851fb7738bb8eb1c86eea7bf9", null ]
 ];
